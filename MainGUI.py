@@ -5,7 +5,6 @@ from PyQt5.QtWidgets import QMessageBox
 from UserData import data
 import configparser
 from dadata import Dadata
-import subprocess
 from main import start
 
 myarr = []

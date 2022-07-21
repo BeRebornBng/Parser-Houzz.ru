@@ -1,7 +1,12 @@
+import os
+import time
+
 import requests
 import json
+import openpyxl
 from bs4 import BeautifulSoup
-import pandas as pd
+from openpyxl import Workbook
+from openpyxl.styles import Font
 import configparser
 from concurrent.futures import ThreadPoolExecutor
 
@@ -9,17 +14,21 @@ url = "https://www.houzz.ru/professionals/"
 spec = ''
 index = ''
 
-myArray = []
-def Parser(value):
-    global myArray
-    global spec
-    global index
-    config = configparser.ConfigParser()
-    config.read('MyData.ini')
-    spec = config['Link']['spec']
-    index = '/c/' + config['Link']['index']
+mass = []
 
-    response = requests.get(value)
+sh1: vars()
+wb: vars()
+links_wb: vars()
+linksSh: vars()
+
+def Func(value):
+    value = "Hello my name is Bakit."
+    return value
+
+def Parser(indexLink):
+    global sh1
+    link = linksSh[indexLink][0].value
+    response = requests.get(link)
     soup = BeautifulSoup(response.text, 'html.parser')
 
     tel = json.loads(soup.find('div', 'hz-page-content-wrapper').find('script').text)
@@ -39,7 +48,7 @@ def Parser(value):
     except:
         pass
     try:
-        myDict['Сайт HOUZ'] = value
+        myDict['Сайт HOUZ'] = link
         myDict['Сайт'] = (tel[0]['url'])
     except:
         pass
@@ -73,25 +82,37 @@ def Parser(value):
         myDict['Средняя стоимость работ'] = myAvg[2].text
     except:
         pass
-    myArray.append(myDict)
-    return myArray
+    sh1.append((myDict['Наименование'], myDict['Сайт HOUZ'], myDict['Сайт'],
+                myDict['Номер телефона'], myDict['Адрес'], myDict['О нас'],
+                myDict['Предоставляемые услуги'], myDict['География работ'],
+                myDict['Средняя стоимость работ']))
+    print("Parser")
+    print(indexLink)
 
-mass = []
+
+count = 1
+
+
 def getLinks(value):
+    global linksSh
+    global count
     global mass
-    global spec
-    global index
     config = configparser.ConfigParser()
     config.read('MyData.ini')
     spec = config['Link']['spec']
     index = '/c/' + config['Link']['index']
-    mass = []
-    print(url + spec + index)
-    response = requests.get(url + spec + index + '/p/' + str(value))
+    if (index == '/c/'):
+        response = requests.get(url + spec + '/p/' + str(value))
+    else:
+        response = requests.get(url + spec + index + '/p/' + str(value))
     soup = BeautifulSoup(response.text, 'html.parser')
     s = soup.find('ul', 'hz-pro-search-results').findAll('a', 'hz-pro-ctl')
     for item in s:
-        mass.append(item.get('href'))
+        print("GetLink")
+        print(count)
+        linksSh.append([str(item.get('href'))])
+        mass.append(count)
+        count += 1
 
 
 def getNumberOfPages():
@@ -101,7 +122,7 @@ def getNumberOfPages():
     config.read('MyData.ini')
     spec = config['Link']['spec']
     index = '/c/' + config['Link']['index']
-    print(url+spec+index)
+    print(url + spec + index)
     response = requests.get(url + spec + index)
     soup = BeautifulSoup(response.text, 'html.parser')
     s = soup.find('div', 'hz-pro-search-controls__pagination mlm').findAll('span', 'text-bold')
@@ -121,33 +142,78 @@ def getNumberOfPages():
     return (int(numAll) / ((int(numOne) - int(numZero)) + 1))
 
 
-def end_func():
-    df = pd.DataFrame(data=myArray)
-    df.to_excel('output.xlsx', index=False)
-
-
-def arrLinks():
-    with ThreadPoolExecutor(max_workers=100000) as t:
-        t.map(Parser, mass)
-    print(myArray)
-    end_func()
-
 def start():
+    global wb
+    global sh1
+    global links_wb
+    global linksSh
+    global count
+
+    try:
+        os.remove('output.xlsx')
+        wb = Workbook()
+        wb['Sheet'].title = "List"
+        sh1 = wb.active
+    except:
+        links_wb = Workbook()
+        links_wb['Sheet'].title = "List"
+        linksSh = links_wb.active
+        wb = Workbook()
+        wb['Sheet'].title = "List"
+        sh1 = wb.active
+
+    try:
+        os.remove('Links.xlsx')
+        links_wb = Workbook()
+        links_wb['Sheet'].title = "List"
+        linksSh = links_wb.active
+    except:
+        links_wb = Workbook()
+        links_wb['Sheet'].title = "List"
+        linksSh = links_wb.active
+
+    config = configparser.ConfigParser()
+    config.read('MyData.ini')
+    threads = int(config['Link']['threads'])
+
     try:
         numberOfPages = getNumberOfPages()
     except Exception:
         print("Ничего не найдено")
         return 1
+
     arr = []
     i = 0
     while (i < numberOfPages * 15):
         arr.append(i)
         i += 15
-    with ThreadPoolExecutor(max_workers=10000) as p:
-        p.map(getLinks, arr)
-    arrLinks()
-    print(mass)
-    return 0
 
-'''if __name__ == "__main__":
-    start()'''
+    with ThreadPoolExecutor(max_workers=(os.cpu_count() * threads)) as p:
+        p.map(getLinks, arr)
+    links_wb.save("Links.xlsx")
+    time.sleep(5)
+
+    links_wb = openpyxl.open("Links.xlsx", read_only=True)
+    linksSh = links_wb.active
+    sh1.append(('Наименование', 'Сайт HOUZ', 'Сайт',
+                'Номер телефона', 'Адрес', 'О нас',
+                'Предоставляемые услуги', 'География работ',
+                'Средняя стоимость работ'))
+    sh1[1][0].font = Font(bold=True)
+    sh1[1][1].font = Font(bold=True)
+    sh1[1][2].font = Font(bold=True)
+    sh1[1][3].font = Font(bold=True)
+    sh1[1][4].font = Font(bold=True)
+    sh1[1][5].font = Font(bold=True)
+    sh1[1][6].font = Font(bold=True)
+    sh1[1][7].font = Font(bold=True)
+    sh1[1][8].font = Font(bold=True)
+
+
+    with ThreadPoolExecutor(max_workers=(os.cpu_count() * threads)) as p:
+        p.map(Parser, mass)
+
+    wb.save('output.xlsx')
+    mass.clear()
+    count = 1
+    return 0
