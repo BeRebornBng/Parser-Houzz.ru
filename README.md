@@ -1,2 +1,2 @@
 # Parser-Houzz.ru
-It's bad project
+It's a bad project
